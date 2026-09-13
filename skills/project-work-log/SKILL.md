@@ -27,7 +27,7 @@ description: 为长期项目建立并维护工作记录体系（过程记录 jou
 > 例：研究项目用 `批次：3` + `## 结果`（样本量、结论、反例）；写作项目用 `版本：v2` + `## 评审`（编辑意见与处理）；
 > 软件项目用 `变更集：154` + `## 验证`（测试命令与通过数）。
 
-本工作区的 `work-log/` + `lessons/` 就是这套体系的实例；基线分析（哪些沿用、哪些坑要避开）见
+这套体系来自一个真实项目的 `work-log/` + `lessons/` 实践；基线分析（哪些沿用、哪些坑要避开）见
 [references/analysis.md](references/analysis.md)。
 
 ## 何时用
@@ -130,7 +130,7 @@ python scripts/journal.py export --csv --out journal.csv   # 机器可读导出
 
 | 反模式 | 后果 | 正确做法 |
 |---|---|---|
-| 台账靠人肉同步、长期不更 | "当前状态"过期，看板不可信（`work-log/46` P2-7） | 收尾必更状态块，并用 `check` 判新鲜度 |
+| 台账靠人肉同步、长期不更 | "当前状态"过期，看板不可信（基线项目实测） | 收尾必更状态块，并用 `check` 判新鲜度 |
 | 当前状态 + 一堆历史状态堆在索引 | 索引膨胀、改一处分多处 | 只有一块当前状态，旧块进 STATUS-HISTORY |
 | 有的记录写日期、有的不写 | 无法机器校验、审计困难（基线 41/106） | `日期：` 必填，由 `check` 判 error |
 | 篇号当迭代号引用 | 引用歧义 | 迭代号只写迭代字段，回指一律 `wl/NNNN` |
@@ -142,7 +142,7 @@ python scripts/journal.py export --csv --out journal.csv   # 机器可读导出
 
 ## 参考文件
 
-- [references/analysis.md](references/analysis.md) · 基线 `work-log/`+`lessons/` 的实测分析与改进对照
+- [references/analysis.md](references/analysis.md) · 基线实测分析与改进对照
 - [references/conventions.md](references/conventions.md) · 目录/编号/生命周期/台账/经验层的硬约定
 - [references/commands.md](references/commands.md) · `journal.py` 全部命令与组合套路
 - [references/templates.md](references/templates.md) · 记录、台账、归档、经验分册、复盘 全套模板

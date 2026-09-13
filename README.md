@@ -99,7 +99,7 @@ python <skill>/scripts/journal.py check --strict && python <skill>/scripts/journ
         │   ├── conventions.md   # 目录 / 编号 / 生命周期 / 台账 / 经验层的硬约定
         │   ├── templates.md     # 记录、台账、归档、经验分册、复盘 全套模板
         │   ├── commands.md      # 17 个子命令的完整说明与组合套路
-        │   └── analysis.md      # 设计依据：对真实 151 篇记录的实测分析与改进对照
+        │   └── analysis.md      # 设计依据：对一套真实记录的实测分析与改进对照
         └── scripts/
             ├── journal.py       # 工具箱（唯一入口，纯标准库）
             ├── _selftest.py     # 自测：临时工程跑通全部命令 + CRLF 保真
@@ -141,7 +141,7 @@ python skills/project-work-log/scripts/_selftest.py
 
 ## 设计依据
 
-不是凭空设计的约定，而是对一个真实项目 **151 篇记录 / 5 个经验分册**做实测后总结的：
+不是凭空设计的约定，而是对一套真实的长期项目记录做实测后总结的：
 哪些做法有效（编号即地址、三层不互相复制、证据优先）、哪些会腐坏（台账漂移、格式漂移、双份数字）。
 详见 [`references/analysis.md`](skills/project-work-log/references/analysis.md)。
 
