@@ -1,0 +1,5 @@
+# 统一行尾为 LF。
+#
+# 原因：Windows 上 core.autocrlf=true 会在 checkout 时把工作区写成 CRLF（git 索引里仍是 LF），
+# 这会让 _package.py 的「源 vs 包」比较把没改过的文件误报成漂移，也让 diff 充满噪音。
+* text=auto eol=lf
