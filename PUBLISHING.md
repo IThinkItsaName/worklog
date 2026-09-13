@@ -6,8 +6,8 @@
 
 | 项 | 说明 |
 |---|---|
-| **许可证** | `LICENSE` 现为 MIT，但版权人还是占位符 `<YOUR NAME OR GITHUB HANDLE>`——**必须改**（改成你的名字或 GitHub 用户名）。若不想用 MIT，换掉整个文件即可。 |
-| **仓库名 / OWNER** | 下文用 `<OWNER>`、`project-work-log` 占位，按需替换。 |
+| **许可证** | MIT，版权人已署为 `IThinkItsaName`（要改就编辑 `LICENSE`）。若不想用 MIT，换掉整个文件即可。 |
+| **仓库名 / OWNER** | 已按 `IThinkItsaName/worklog` 写进下文；若改名，先全局替换这两个值。 |
 | **`package.json` 的 `name`** | 现在是 `pi-project-work-log`。**如果只通过 git 安装，名字无所谓**；若要 `npm publish`，先去 npm 查是否重名。 |
 
 ## 1. 本地初始化并首次提交
@@ -40,7 +40,7 @@ gh repo create worklog --public --source=. --remote=origin --push
 ## 3. 推送
 
 ```bash
-git remote add origin https://github.com/<OWNER>/worklog.git
+git remote add origin https://github.com/IThinkItsaName/worklog.git
 git branch -M main
 git push -u origin main
 ```
@@ -57,7 +57,7 @@ git push origin v0.1.0
 之后别人可以这样装：
 
 ```bash
-pi install git:github.com/<OWNER>/worklog@v0.1.0
+pi install git:github.com/IThinkItsaName/worklog@v0.1.0
 ```
 
 ## 5. 以后怎么更新
@@ -98,7 +98,7 @@ git status --porcelain
 ## 7. 别人怎么装（写进 README 的三条路）
 
 ```bash
-pi install git:github.com/<OWNER>/worklog          # pi 用户
+pi install git:github.com/IThinkItsaName/worklog          # pi 用户
 cp -r skills/project-work-log ~/.pi/agent/skills/           # 手动
 # 其它 harness：把 skills/ 加入它的技能搜索路径（Agent Skills 标准布局）
 ```

@@ -32,13 +32,13 @@
 
 ```bash
 # 全局
-pi install git:github.com/<OWNER>/worklog
+pi install git:github.com/IThinkItsaName/worklog
 
 # 固定到 tag（推荐，避免上游变动）
-pi install git:github.com/<OWNER>/worklog@v0.1.0
+pi install git:github.com/IThinkItsaName/worklog@v0.1.0
 
 # 只装到当前项目（写入 .pi/settings.json，可随仓库共享给团队）
-pi install -l git:github.com/<OWNER>/worklog
+pi install -l git:github.com/IThinkItsaName/worklog
 ```
 
 ### 手动（任意 harness）
