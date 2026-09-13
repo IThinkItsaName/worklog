@@ -8,6 +8,11 @@
 
 ## [未发布]
 
+## [0.1.1] - 2026-09-14
+
+> 说明：本次按 **patch** 号发布，但包含向后兼容的**新能力**（英文别名解析）；
+> 所有原有中文用法完全不受影响。
+
 ### 新增
 
 - **跨语言解析**：解析标签集中为常量并支持**英文别名**（写入仍默认中文）：
@@ -51,5 +56,6 @@
 - 本技能整理自作者使用 **DeepSeek Flash 系列模型**处理内容时的常用操作，并**完全由该系列模型整理生成**；
   使用时请自行甄别，**不保证效果与适用性**
 
-[未发布]: https://github.com/IThinkItsaName/worklog/compare/v0.1.0...HEAD
+[未发布]: https://github.com/IThinkItsaName/worklog/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/IThinkItsaName/worklog/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/IThinkItsaName/worklog/tree/v0.1.0
