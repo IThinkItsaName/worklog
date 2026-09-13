@@ -145,6 +145,10 @@ python skills/project-work-log/scripts/_selftest.py
 哪些做法有效（编号即地址、三层不互相复制、证据优先）、哪些会腐坏（台账漂移、格式漂移、双份数字）。
 详见 [`references/analysis.md`](skills/project-work-log/references/analysis.md)。
 
+## 更新日志
+
+版本变化见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 许可
 
 MIT，见 [LICENSE](LICENSE)。

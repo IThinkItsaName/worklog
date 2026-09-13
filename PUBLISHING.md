@@ -72,13 +72,19 @@ python <工作区>/.pi/skills/project-work-log/scripts/_package.py
 # 2) 只检查有没有漂移（有漂移退出码 1，可当提交前门禁）
 python <工作区>/.pi/skills/project-work-log/scripts/_package.py --check
 
-# 3) 提交并推送
+# 3) 有面向用户的变更时，先追加 CHANGELOG（见下）
+#    把 CHANGELOG.md 里 `## [未发布]` 的内容整理成 `## [x.y.z] - YYYY-MM-DD`
+
+# 4) 提交并推送
 cd <工作区>/publish/worklog
 git add -A && git commit -m "chore: sync skill from source" && git push
 git tag -a v0.1.1 -m "v0.1.1" && git push origin v0.1.1   # 有行为变化时
 ```
 
 > 不要在 `publish/` 里直接改脚本——下次同步会被覆盖。改源，再同步。
+>
+> **发版规矩**：`CHANGELOG.md` **只追加、不改写历史条目**；每次发版更新文末的 compare 链接。
+> **tag 推送后不要移动**（别人可能已钉着它安装）—— 要改就发新版本号。
 
 ## 6. 发布前自检（建议写进检查清单）
 
