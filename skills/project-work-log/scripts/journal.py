@@ -12,7 +12,7 @@
     brief     压缩上下文快照（当前状态 + 待办 + 近期记录），替代整读索引
     show      单篇大纲（元数据 + 小节 + 行数），决定要不要读全文
     search    定向检索（记录 + 经验），只回命中行
-    outline   全部记录的一行表（编号/日期/变更集/标题）
+    outline   全部记录的一行表（编号/日期/迭代/标题）
 
 读写 · 维护
     new       生成下一篇记录（--insert 自动补索引行）
@@ -49,8 +49,14 @@ except Exception:  # pragma: no cover
 
 # 约定关键词（与 references/conventions.md 保持一致）
 K_DATE = "日期"
-K_ITER = "变更集"
+# 迭代字段：写入时用 K_ITER_DEFAULT，解析时接受下面这些别名
+# （软件项目叫"变更集/版本"，研究项目叫"批次/阶段"，写作项目可能叫"里程碑"…）
+K_ITER_DEFAULT = "迭代"
+K_ITER_ALIASES = ("迭代", "变更集", "批次", "阶段", "版本", "里程碑", "Iteration", "Milestone")
 K_VERIFY = "验证"
+# 哪些小节算"验证/复核"小节（不同领域叫法不同）
+VERIFY_WORDS = ("验证", "实测", "复核", "检查", "审查", "评审", "结果", "证据", "评估", "确认",
+                "Verification", "Review", "Results", "Evidence")
 K_STATUS = "当前状态"
 K_TODO = "待办"
 
@@ -59,13 +65,13 @@ HEADING_RE = re.compile(r"^#\s*(\d+)\s*[·.、:：]")
 H1_RE = re.compile(r"^#\s+(.+)$", re.M)
 DATE_LINE_RE = re.compile(r"^日期\s*[：:]\s*(\S+)", re.M)
 ISO_DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
-VERIFY_HEAD_RE = re.compile(r"^#{2,3}\s*.*(验证|实测|复核|Verification)", re.M)
+VERIFY_HEAD_RE = re.compile(r"^#{2,3}\s*.*(" + "|".join(map(re.escape, VERIFY_WORDS)) + ")", re.M)
 LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
 CITE_RE = re.compile(r"wl/(\d{1,4})")
 
-STATUS_KEYS = ["分支 / HEAD", "变更集", "构建", "测试", "交付物与指纹", "环境", "阻塞 / 等待"]
+STATUS_KEYS = ["阶段 / 版本", "迭代", "产出", "核对 / 验证", "交付物与指纹", "环境", "阻塞 / 等待"]
 
-PLACEHOLDERS = ["<验证命令>", "<一句话", "<标题", "<path>", "<项目>", "TODO", "TBD", "XXX", "待填", "待补充"]
+PLACEHOLDERS = ["<命令 / 数据 / 引用 / 样本>", "<验证命令>", "<一句话", "<标题", "<对象>", "<项目>", "TODO", "TBD", "XXX", "待填", "待补充"]
 VAGUE = ["应该没问题", "应该可以", "大概", "可能没问题", "似乎", "估计", "应该是"]
 
 STOPWORDS = {
@@ -77,7 +83,7 @@ STOPWORDS = {
 ENTRY_TEMPLATE = """# {num:04d} · {title}
 
 日期：{date}
-变更集：{iter}
+迭代：{iter}
 触发：
 范围：
 结论：
@@ -88,15 +94,15 @@ ENTRY_TEMPLATE = """# {num:04d} · {title}
 
 ## 二、方案与取舍
 
-## 三、实施
+## 三、执行
 
-| 文件 | 改动 |
+| 对象 | 改动 |
 |---|---|
 |  |  |
 
 ## 四、验证
 
-- 命令：`{cmd}`
+- 方式：`{cmd}`
 - 结果：
 - 未覆盖：
 
@@ -188,19 +194,28 @@ def slugify(title: str) -> str:
     return re.sub(r"-{2,}", "-", s)[:48] or "entry"
 
 
+def parse_iter(text: str) -> str:
+    """从记录入口行读迭代标识，兼容各领域的叫法（迭代/变更集/批次/阶段/版本/里程碑）。"""
+    for key in K_ITER_ALIASES:
+        m = re.search(rf"^{re.escape(key)}\s*[：:]\s*(\S+)", text, re.M)
+        if m:
+            return m.group(1)
+    return ""
+
+
 def meta_of(path: str) -> dict:
     """解析一篇记录的元数据（不全量保留正文）。"""
     text = read(path)
     h1 = H1_RE.search(text)
     title = re.sub(r"^\d+\s*[·.、:：]\s*", "", h1.group(1)).strip() if h1 else os.path.basename(path)
     dm = DATE_LINE_RE.search(text)
-    im = re.search(rf"^{K_ITER}\s*[：:]\s*(\S+)", text, re.M)
+    iv = parse_iter(text)
     cm = re.search(r"^结论\s*[：:]\s*(.+)$", text, re.M)
     sections = re.findall(r"^(#{2,3})\s+(.+?)\s*$", text, re.M)
     return {
         "title": title,
         "date": dm.group(1) if dm else "",
-        "iter": im.group(1) if im else "",
+        "iter": iv,
         "conclusion": (cm.group(1).strip() if cm else ""),
         "sections": [s[1] for s in sections],
         "lines": text.count("\n") + 1,
@@ -248,6 +263,21 @@ def last_content_line(lines: list[str], start: int, end: int) -> int:
 def insert_at_end_of_section(lines: list[str], start: int, end: int, new_lines: list[str]) -> None:
     pos = last_content_line(lines, start, end) + 1
     lines[pos:pos] = new_lines
+
+
+def find_verify_section(lines: list[str]):
+    """按各领域的叫法找「验证 / 复核」小节（验证、评审、检查、结果、证据…）。"""
+    for level in (4, 3, 2):
+        for word in VERIFY_WORDS:
+            span = find_section(lines, level, word)
+            if span:
+                return span
+    return None
+
+
+def _checkable(text: str) -> bool:
+    """是否含可核对的信息：命令（反引号）/ 数字 / 链接。用于 lint 的领域无关口径。"""
+    return ("`" in text) or bool(re.search(r"\d", text)) or ("http" in text)
 
 
 # --------------------------------------------------------------------------- #
@@ -430,15 +460,15 @@ def lint(root: str, journal_arg: str | None, strict: bool) -> Report:
         cm = re.search(r"^结论\s*[：:]\s*(.*)$", text, re.M)
         if not cm or not cm.group(1).strip():
             rep.add("WARN", where, "「结论：」为空")
-        elif not re.search(r"\d", cm.group(1)):
-            rep.add("WARN", where, "结论没有数字（写成可核对的结果）")
-        span = find_section(lines, 4, K_VERIFY) or find_section(lines, 2, K_VERIFY) or find_section(lines, 3, K_VERIFY)
+        elif not _checkable(cm.group(1)):
+            rep.add("WARN", where, "结论没有可核对的信息（数字 / 引用 / 链接）")
+        span = find_verify_section(lines)
         if span:
             body = "".join(lines[span[1]:span[2]]).strip()
             if len(body) < 10:
                 rep.add("WARN", where, "验证小节为空")
-            elif "`" not in body:
-                rep.add("WARN", where, "验证小节没有命令（反引号包起来的可复现命令）")
+            elif not _checkable(body):
+                rep.add("WARN", where, "验证小节没有可核对的内容（命令 / 数据 / 引用 / 样本）")
             for w in VAGUE:
                 if w in body:
                     rep.add("WARN", where, f"验证含含糊措辞：`{w}`")
@@ -513,7 +543,7 @@ def cmd_brief(args: argparse.Namespace) -> int:
     print(f"\n## 近期记录（{args.entries}）")
     for n in sorted(nums, reverse=True)[: args.entries]:
         m = meta_of(entries[n][0])
-        it = f"变更集 {m['iter']}" if m["iter"] and m["iter"] != "-" else "不占号"
+        it = f"迭代 {m['iter']}" if m["iter"] and m["iter"] != "-" else "不编号"
         print(f"#{n:<4d} {m['date'] or '(无日期)':10s} [{it}] {'OK ' if m['has_verify'] else 'NO '} {m['title'][:52]}")
     return 0
 
@@ -545,7 +575,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     text = read(path)
     print(f"#{num:04d}  {rel(root, path)}")
     print(f"title : {m['title']}")
-    print(f"date  : {m['date'] or '-'}   变更集: {m['iter'] or '-'}   {m['lines']} lines / {m['bytes']} B"
+    print(f"date  : {m['date'] or '-'}   迭代: {m['iter'] or '-'}   {m['lines']} lines / {m['bytes']} B"
           f"   verify: {'yes' if m['has_verify'] else 'no'}")
     for key in ("触发", "范围", "结论"):
         mm = re.search(rf"^{key}\s*[：:]\s*(.+)$", text, re.M)
@@ -642,13 +672,13 @@ def index_sync(journal: str, only: list[int] | None = None, stage: str | None = 
         label = re.sub(r"\s+", " ", label).strip()[:60] or m["title"][:60]
         new_lines.append(f"| [{fname}]({fname}) | {label} |{nl}")
     if dry_run:
-        return missing, f"[dry-run] 将写入 `{sub_title}` {len(missing)} 行：" + "; ".join(f"#{n}" for n in missing)
+        return missing, f"[dry-run] 将写入 `{sub_title}` {len(missing)} 行：" + "; ".join(f"#{n:04d}" for n in missing)
     if span:
         lines[span[1] + 1: span[1] + 1] = new_lines
     else:
         lines[chosen[0] + 1: chosen[0] + 1] = [f"| 文件 | 方面 |{nl}", f"|---|---|{nl}"] + new_lines + [nl]
     write_raw(index, "".join(lines))
-    return missing, f"已写入 `{sub_title}`：{', '.join('#' + str(n) for n in missing)}"
+    return missing, f"已写入 `{sub_title}`：{', '.join(f'#{n:04d}' for n in missing)}"
 
 
 def cmd_new(args: argparse.Namespace) -> int:
@@ -665,7 +695,7 @@ def cmd_new(args: argparse.Namespace) -> int:
     path = os.path.join(journal, fname)
     body = ENTRY_TEMPLATE.format(num=num, title=args.title, date=date,
                                  iter=args.iter if args.iter is not None else "-",
-                                 cmd=args.cmd or "<验证命令>")
+                                 cmd=args.cmd or "<命令 / 数据 / 引用 / 样本>")
     if os.path.exists(path):
         print(f"ERROR: 已存在 {rel(root, path)}")
         return 1
@@ -695,7 +725,7 @@ def cmd_index(args: argparse.Namespace) -> int:
     missing, msg = index_sync(journal, stage=args.stage, aspect=args.aspect, dry_run=args.dry_run)
     print(msg)
     for n in missing:
-        print(f"  #{n}")
+        print(f"  #{n:04d}")
     return 0
 
 
@@ -981,7 +1011,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
     print(f"size        : {total_lines} lines / {total_bytes / 1024:.0f} KB"
           f"   avg {total_lines // len(nums)} lines   largest #{biggest} ({metas[biggest]['bytes'] / 1024:.0f} KB)")
     iters = [m["iter"] for m in metas.values() if m["iter"] and m["iter"] != "-"]
-    print(f"变更集字段  : {len(iters)}/{len(nums)} 有值")
+    print(f"迭代字段    : {len(iters)}/{len(nums)} 有值")
     if lessons:
         cites: dict[int, int] = {}
         for f in sorted(os.listdir(lessons)):
@@ -1064,7 +1094,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
     lines += ["## " + K_STATUS, "", sb or "(索引里没有状态块)", ""]
     open_items, _ = todo_items(journal) if journal else ([], [])
     lines += ["## " + K_TODO, ""] + (open_items or ["(无未完成项)"]) + [""]
-    lines += [f"## 近期记录（最近 {args.entries} 篇）", "", "| 篇号 | 日期 | 变更集 | 标题 |", "|---|---|---|---|"]
+    lines += [f"## 近期记录（最近 {args.entries} 篇）", "", "| 篇号 | 日期 | 迭代 | 标题 |", "|---|---|---|---|"]
     for n in sorted(nums, reverse=True)[: args.entries]:
         m = meta_of(entries[n][0])
         lines.append(f"| {n:04d} | {m['date'] or '-'} | {m['iter'] or '-'} | {m['title']} |")
@@ -1103,7 +1133,7 @@ def cmd_retro(args: argparse.Namespace) -> int:
         return os.path.relpath(path, base).replace(os.sep, "/")
 
     out = [f"# 99 · 阶段复盘", "", f"## 一、阶段表（{stage}）", "",
-           "| 变更集 | 日期 | 记录 | 产出 |", "|---|---|---|---|"]
+           "| 迭代 | 日期 | 记录 | 产出 |", "|---|---|---|---|"]
     for n in nums:
         m = meta_of(entries[n][0])
         out.append(f"| {m['iter'] or '-'} | {m['date'] or '-'} | [wl/{n:04d}]({link_for(entries[n][0])}) | {m['title']} |")
@@ -1173,10 +1203,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = add("new", cmd_new, "生成下一篇记录")
     p.add_argument("--title", required=True)
-    p.add_argument("--iter", type=int, default=None, help="变更集号（默认 -）")
+    p.add_argument("--iter", type=int, default=None, help=f"迭代编号（默认 -；解析时兼容变更集/批次/阶段/版本/里程碑）")
     p.add_argument("--slug", default=None)
     p.add_argument("--date", default=None)
-    p.add_argument("--cmd", default=None, help="预填验证命令")
+    p.add_argument("--cmd", default=None, help="预填验证依据（命令 / 数据 / 引用 / 样本）")
     p.add_argument("--insert", action="store_true", help="自动补进索引表")
     p.add_argument("--stage", default=None, help="配合 --insert 指定阶段小节")
     p.add_argument("--dry-run", action="store_true")

@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate package.json
+        run: python -m json.tool package.json > /dev/null
+
+      - name: Validate SKILL.md frontmatter
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+          text = pathlib.Path("skills/project-work-log/SKILL.md").read_text(encoding="utf-8")
+          m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+          if not m:
+              sys.exit("SKILL.md: missing frontmatter")
+          fm = m.group(1)
+          name = re.search(r"^name:\s*(.+)$", fm, re.M)
+          desc = re.search(r"^description:\s*(.+)$", fm, re.M)
+          if not name or not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name.group(1).strip()):
+              sys.exit("SKILL.md: invalid name")
+          if not desc or len(desc.group(1).strip()) > 1024:
+              sys.exit("SKILL.md: invalid description")
+          print("SKILL.md frontmatter OK")
+          PY
+
+      - name: Skill self-test (36 checks)
+        run: python skills/project-work-log/scripts/_selftest.py

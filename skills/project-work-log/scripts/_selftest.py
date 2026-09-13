@@ -68,6 +68,27 @@ LESSONS_INDEX = """# 经验手册
 | [01-topic.md](01-topic.md) | x |
 """
 
+# 非编程场景：用“批次”别名 + “结果”小节 + 数据（没有命令）
+RESEARCH = """# 0003 · 用户访谈结论
+
+日期：2026-09-15
+批次：3
+触发：访谈
+范围：12 位用户
+结论：8/12 提到价格敏感
+
+---
+
+## 一、背景与事实核查
+
+12 位用户访谈记录见访谈纪要。
+
+## 二、结果
+
+- 8/12 提到价格敏感（67%）
+- 3 人主动提到竞品 A
+"""
+
 VOLUME = """# 01 · Seed topic
 
 来源：wl/0001。
@@ -171,19 +192,25 @@ def main() -> int:
 
         # lint: placeholder present, then cleaned -------------------------
         r = run(tmp, "lint")
-        ok("<验证命令>" in r.stdout or "占位符" in r.stdout, "lint flags template placeholder", r.stdout)
+        ok("占位符" in r.stdout, "lint flags template placeholder", r.stdout)
         text = read(entry)
-        text = text.replace("- 命令：`<验证命令>`", "- 命令：`pytest -q`").replace("- 结果：", "- 结果：312 passed").replace(
-            "结论：", "结论：312 项测试全绿")
+        text = text.replace("- 方式：`<命令 / 数据 / 引用 / 样本>`", "- 方式：`pytest -q`").replace(
+            "- 结果：", "- 结果：312 passed").replace("结论：", "结论：312 项测试全绿")
         text = text.replace("## 一、背景与事实核查\n\n## 二、方案与取舍",
                             "## 一、背景与事实核查\n\nneed\n\n## 二、方案与取舍\n\nchoice")
         write(entry, text)
-        r = run(tmp, "lint", "--strict")
-        ok(r.returncode == 0, "lint clean after filling entry", r.stdout + r.stderr)
 
-        # check ------------------------------------------------------------
+        # 领域无关：非编程记录（批次别名 + 结果小节 + 数据）-----------------
+        write(os.path.join(tmp, "journal", "0003-research-note.md"), RESEARCH)
+        r = run(tmp, "index", "sync")
+        ok("0003" in r.stdout, "index sync picks up non-coding entry", r.stdout)
+        run(tmp, "status", "--date", "2026-09-15")   # 新记录带来更新的日期，台账要跟上
+        r = run(tmp, "outline")
+        ok("0003\t2026-09-15\t3\t" in r.stdout, "outline reads \u201c批次\u201d alias", r.stdout)
         r = run(tmp, "check", "--strict", "--quiet")
-        ok(r.returncode == 0, "check --strict clean", r.stdout + r.stderr)
+        ok(r.returncode == 0, "check --strict clean (coding + non-coding)", r.stdout + r.stderr)
+        r = run(tmp, "lint", "--strict")
+        ok(r.returncode == 0, "lint clean (coding + non-coding)", r.stdout + r.stderr)
 
         # CRLF fidelity ----------------------------------------------------
         index_path = os.path.join(tmp, "journal", "README.md")

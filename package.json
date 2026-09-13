@@ -1,7 +1,7 @@
 {
   "name": "pi-project-work-log",
   "version": "0.1.0",
-  "description": "Long-term project work-log system for AI coding agents: process journal + index ledger + lessons, with a stdlib-only Python toolbox.",
+  "description": "Long-term project work-log system for AI agents (software, research, writing, design, operations): process journal + index ledger + lessons, with a stdlib-only Python toolbox.",
   "license": "MIT",
   "keywords": [
     "pi-package",
@@ -9,7 +9,9 @@
     "work-log",
     "journal",
     "lessons",
-    "documentation"
+    "documentation",
+    "knowledge-base",
+    "notes"
   ],
   "pi": {
     "skills": [

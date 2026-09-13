@@ -13,7 +13,7 @@
 ## 1. 本地初始化并首次提交
 
 ```bash
-cd <工作区>/publish/project-work-log
+cd <工作区>/publish/worklog
 
 git init -b main
 git add .
@@ -34,13 +34,13 @@ git commit -m "feat: project-work-log skill (journal + lessons + toolbox)"
 
 ```bash
 gh auth login
-gh repo create project-work-log --public --source=. --remote=origin --push
+gh repo create worklog --public --source=. --remote=origin --push
 ```
 
 ## 3. 推送
 
 ```bash
-git remote add origin https://github.com/<OWNER>/project-work-log.git
+git remote add origin https://github.com/<OWNER>/worklog.git
 git branch -M main
 git push -u origin main
 ```
@@ -57,7 +57,7 @@ git push origin v0.1.0
 之后别人可以这样装：
 
 ```bash
-pi install git:github.com/<OWNER>/project-work-log@v0.1.0
+pi install git:github.com/<OWNER>/worklog@v0.1.0
 ```
 
 ## 5. 以后怎么更新
@@ -73,7 +73,7 @@ python <工作区>/.pi/skills/project-work-log/scripts/_package.py
 python <工作区>/.pi/skills/project-work-log/scripts/_package.py --check
 
 # 3) 提交并推送
-cd <工作区>/publish/project-work-log
+cd <工作区>/publish/worklog
 git add -A && git commit -m "chore: sync skill from source" && git push
 git tag -a v0.1.1 -m "v0.1.1" && git push origin v0.1.1   # 有行为变化时
 ```
@@ -83,7 +83,7 @@ git tag -a v0.1.1 -m "v0.1.1" && git push origin v0.1.1   # 有行为变化时
 ## 6. 发布前自检（建议写进检查清单）
 
 ```bash
-cd <工作区>/publish/project-work-log
+cd <工作区>/publish/worklog
 
 # 包内路径下也能跑通（验证相对路径没有写死）
 python skills/project-work-log/scripts/_selftest.py        # 期望 34/34 passed
@@ -98,7 +98,7 @@ git status --porcelain
 ## 7. 别人怎么装（写进 README 的三条路）
 
 ```bash
-pi install git:github.com/<OWNER>/project-work-log          # pi 用户
+pi install git:github.com/<OWNER>/worklog          # pi 用户
 cp -r skills/project-work-log ~/.pi/agent/skills/           # 手动
 # 其它 harness：把 skills/ 加入它的技能搜索路径（Agent Skills 标准布局）
 ```

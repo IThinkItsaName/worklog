@@ -1,8 +1,11 @@
-# project-work-log
+# worklog
 
-> 给长期项目用的**工作记录体系**（Agent Skill）：过程记录 + 索引台账 + 经验手册，外加一套 13 个子命令的管理 / 分析工具箱。
+> 给长期项目用的**工作记录体系**（Agent Skill，技能名 `project-work-log`）：过程记录 + 索引台账 + 经验手册，外加一套 13 个子命令的管理 / 分析工具箱。
 
-适用于支持 [Agent Skills](https://agentskills.io/specification) 的编码代理（pi、Claude Code 等）。
+**不限编程**：软件、研究、写作、设计、运营、教学……任何跳会话或跨周持续投入的项目都能用。
+术语可换（迭代字段接受 `迭代 / 变更集 / 批次 / 阶段 / 版本 / 里程碑`），验证口径也放宽到“命令 / 数据 / 引用 / 样本”。
+
+适用于支持 [Agent Skills](https://agentskills.io/specification) 的 AI 代理（pi、Claude Code 等）。
 
 ## 它解决什么问题
 
@@ -16,7 +19,7 @@
 
 | 层 | 位置 | 职责 |
 |---|---|---|
-| 过程层 | `journal/NNNN-*.md` | 一篇 = 一个变更集：背景 → 事实 → 方案 → 实施 → 验证 → 遗留 |
+| 过程层 | `journal/NNNN-*.md` | 一篇 = 一个迭代：背景 → 事实 → 方案 → 执行 → 验证 → 遗留 |
 | 索引层 | `journal/README.md` | 分阶段索引 + 同主题簇 + 滚动待办 + **唯一**当前状态块 |
 | 经验层 | `lessons/*.md` | 可复用知识：症状 → 根因 → 做法 → 来源 |
 
@@ -29,13 +32,13 @@
 
 ```bash
 # 全局
-pi install git:github.com/<OWNER>/project-work-log
+pi install git:github.com/<OWNER>/worklog
 
 # 固定到 tag（推荐，避免上游变动）
-pi install git:github.com/<OWNER>/project-work-log@v0.1.0
+pi install git:github.com/<OWNER>/worklog@v0.1.0
 
 # 只装到当前项目（写入 .pi/settings.json，可随仓库共享给团队）
-pi install -l git:github.com/<OWNER>/project-work-log
+pi install -l git:github.com/<OWNER>/worklog
 ```
 
 ### 手动（任意 harness）
@@ -69,10 +72,12 @@ python <skill>/scripts/journal.py brief
 
 # 生成下一篇记录并自动补索引行
 python <skill>/scripts/journal.py new --title "给登录加限流" --iter 42 --insert --stage "B. 迭代"
+# 非编程项目完全一样用：标题写“第三轮用户访谈结论”，迭代字段也可写 批次/阶段/版本
+python <skill>/scripts/journal.py new --title "第三轮用户访谈结论" --iter 3
 
 # 收尾：更新状态 → 抽经验 → 过门禁
-python <skill>/scripts/journal.py status --set "测试=380 PASS" --date
-python <skill>/scripts/journal.py lesson add --volume 04-verification-and-safety.md --source 42 --text "…"
+python <skill>/scripts/journal.py status --set "核对=抽样 30 条全部通过" --date
+python <skill>/scripts/journal.py lesson add --volume 02-verification.md --source 42 --text "…"
 python <skill>/scripts/journal.py check --strict && python <skill>/scripts/journal.py lint --strict
 ```
 
@@ -107,6 +112,15 @@ python <skill>/scripts/journal.py check --strict && python <skill>/scripts/journ
 | 分析生成 | `stats`（语料统计）、`topics`（同主题簇建议）、`digest`（交接摘要）、`retro`（复盘骨架）、`export`（JSON/CSV） |
 
 完整参数与套路见 [`skills/project-work-log/references/commands.md`](skills/project-work-log/references/commands.md)。
+
+## 领域适配（不限于编程）
+
+| 你要决定的 | 怎么做 |
+|---|---|
+| 迭代叫什么 | 入口字段默认 `迭代：N`；也认 `变更集 / 批次 / 阶段 / 版本 / 里程碑` |
+| 怎么算“验证” | 小节标题含 `验证 / 复核 / 检查 / 评审 / 结果 / 证据 / 评估 / 确认` 任一即可 |
+| 什么算“可核对” | 命令、数字、链接、引用、样本都算（**不**强制要求可执行命令） |
+| 例子 | 研究：`批次：3` + `## 结果`（样本量、结论、反例）；写作：`版本：v2` + `## 评审`（编辑意见与处理）；软件：`变更集：154` + `## 验证`（命令与通过数） |
 
 ## 环境要求
 
