@@ -50,6 +50,27 @@
 - **归档**：阶段收口、索引表停止增长时，把整阶段的记录 move 到 `journal/archive/<stage>/`；
   同步改索引链接、写归档索引，并跑一次 `journal.py check`。
 
+## 整理与清理（量增长后）
+
+**证据不删**是硬规则：清理 = 移走 + 汇总 + 留清单，不是删除。
+
+| 动作 | 命令 | 说明 |
+|---|---|---|
+| 阶段归档 | `journal.py archive --stage X --from N --to M` | 移动 + 全仓链接重写 + 补 `archive/README.md` + 死链自检 |
+| 索引瘦身 | `journal.py index compact` | 已归档小节折叠成一行区间；混合/死链小节自动跳过 |
+| 按年分卷 | `journal.py split --by-year` | 移进 `journal/<YYYY>/`；`wl/NNNN` 回指不受影响 |
+| 冷存 | `journal.py prune [--zip Z] [--apply]` | 默认只报告；打包后才移出，并写 `archive/COLD-STORE.md` |
+
+判据与顺序：
+
+1. **归档判据 = 阶段收口**（索引表不再增长），不用"多少天没引用"这类经验值。
+2. 归档后立刻 `index compact`：否则索引会随归档线性膨胀（实测每篇约 600 字符）。
+3. 冷存判据：已归档 + **未被 lessons 引用** + 早于 `--older-than`（默认 180 天）。
+   未被引用 ≠ 没价值，所以 `prune` **默认只报告**，要人确认后才 `--apply`。
+4. 搬家后必跑 `check`（0 死链）；有死链就报错退出（内容还在，git 可回退）。
+
+> `wl/NNNN` 是纯编号引用，不受目录变化影响；这也是为什么归档/分卷不会破坏经验层的回指。
+
 ## 记录入口（Front-matter，固定 5 行 + 1 可选）
 
 ```markdown

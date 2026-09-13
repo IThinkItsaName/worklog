@@ -1,6 +1,6 @@
 # worklog
 
-> 给长期项目用的**工作记录体系**（Agent Skill，技能名 `project-work-log`）：过程记录 + 索引台账 + 经验手册，外加一套 17 个子命令的管理 / 分析工具箱。
+> 给长期项目用的**工作记录体系**（Agent Skill，技能名 `project-work-log`）：过程记录 + 索引台账 + 经验手册，外加一套 20 个子命令的管理 / 分析 / 清理工具箱。
 
 **不限编程**：软件、研究、写作、设计、运营、教学……任何跳会话或跨周持续投入的项目都能用。
 术语可换（迭代字段接受 `迭代 / 变更集 / 批次 / 阶段 / 版本 / 里程碑`），验证口径也放宽到“命令 / 数据 / 引用 / 样本”。
@@ -98,7 +98,7 @@ python <skill>/scripts/journal.py check --strict && python <skill>/scripts/journ
         ├── references/
         │   ├── conventions.md   # 目录 / 编号 / 生命周期 / 台账 / 经验层的硬约定
         │   ├── templates.md     # 记录、台账、归档、经验分册、复盘 全套模板
-        │   ├── commands.md      # 17 个子命令的完整说明与组合套路
+        │   ├── commands.md      # 20 个子命令的完整说明与组合套路
         │   └── analysis.md      # 设计依据：对一套真实记录的实测分析与改进对照
         └── scripts/
             ├── journal.py       # 工具箱（唯一入口，纯标准库）

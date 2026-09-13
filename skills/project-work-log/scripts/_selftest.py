@@ -98,6 +98,39 @@ VOLUME = """# 01 · Seed topic
 - **seed**：a。根因：b。做法：c。（`wl/0001`）
 """
 
+CLEAN_INDEX = """# P2
+
+## 文件索引
+
+### A. 归档
+
+| 文件 | 方面 |
+|---|---|
+| [archive/stageA/0005-old.md](archive/stageA/0005-old.md) | a |
+| [archive/stageA/0006-old.md](archive/stageA/0006-old.md) | b |
+
+### B. 当前
+
+| 文件 | 方面 |
+|---|---|
+| [0001-alpha.md](0001-alpha.md) | c |
+| [0002-beta.md](0002-beta.md) | d |
+
+## 待办（滚动清单）
+
+- [ ] x
+
+## 当前状态（2026-09-14）
+
+- 阶段 / 版本：v1
+"""
+
+
+def entry(num: str, title: str, date: str, itr: str = "-") -> str:
+    return (f"# {num} · {title}\n\n日期：{date}\n变更集：{itr}\n结论：1 项通过\n\n"
+            f"## 四、验证\n\n- 方式：`true`\n- 结果：1 passed\n")
+
+
 results: list[tuple[bool, str]] = []
 
 
@@ -110,6 +143,69 @@ def run(root: str, *argv: str) -> subprocess.CompletedProcess:
 def ok(cond: bool, label: str, detail: str = "") -> None:
     results.append((bool(cond), label))
     print(("PASS  " if cond else "FAIL  ") + label + (f"   [{detail[:200]}]" if detail and not cond else ""))
+
+
+def cleanup_phase(parent: str) -> None:
+    """A/B/C/D 四项整理能力：索引瘦身 / 归档 / 分卷 / 冷存。"""
+    tmp = os.path.join(parent, "cleanup")
+    os.makedirs(os.path.join(tmp, "journal", "archive", "stageA"))
+    os.makedirs(os.path.join(tmp, "lessons"))
+    write(os.path.join(tmp, "journal", "README.md"), CLEAN_INDEX)
+    write(os.path.join(tmp, "journal", "0001-alpha.md"), entry("0001", "Alpha", "2020-01-01"))
+    write(os.path.join(tmp, "journal", "0002-beta.md"), entry("0002", "Beta", "2026-09-14"))
+    write(os.path.join(tmp, "journal", "archive", "stageA", "0005-old.md"), entry("0005", "Old5", "2020-01-01"))
+    write(os.path.join(tmp, "journal", "archive", "stageA", "0006-old.md"), entry("0006", "Old6", "2020-01-02"))
+    write(os.path.join(tmp, "lessons", "README.md"), LESSONS_INDEX)
+    write(os.path.join(tmp, "lessons", "01-topic.md"),
+          "# 01 · T\n\n来源：wl/0002。\n\n- **s**：a。根因：b。做法：c。（`wl/0002`）\n")
+    jidx = os.path.join(tmp, "journal", "README.md")
+
+    # A) index compact
+    r = run(tmp, "index", "compact", "--dry-run")
+    ok(r.returncode == 0 and "折叠 1 个小节" in r.stdout, "compact dry-run reports", r.stdout)
+    before = read(jidx)
+    ok(read(jidx) == before, "compact dry-run changes nothing")
+    run(tmp, "index", "compact")
+    idx = read(jidx)
+    ok("archive/stageA/0005-old.md" not in idx and "archive/stageA/" in idx,
+       "compact folds archived rows into one", idx)
+    ok("0001-alpha.md" in idx, "compact keeps active rows")
+
+    # B) archive
+    r = run(tmp, "archive", "--stage", "stageB", "--from", "1", "--to", "1")
+    ok(os.path.exists(os.path.join(tmp, "journal", "archive", "stageB", "0001-alpha.md")),
+       "archive moves the file", r.stdout)
+    idx = read(jidx)
+    ok("archive/stageB/0001-alpha.md" in idx, "archive rewrites index link", idx)
+    ok(os.path.exists(os.path.join(tmp, "journal", "archive", "README.md")),
+       "archive writes the archive index")
+
+    # D) split --by-year
+    r = run(tmp, "split", "--by-year")
+    ok(os.path.exists(os.path.join(tmp, "journal", "2026", "0002-beta.md")),
+       "split moves entry under its year", r.stdout)
+    ok("2026/0002-beta.md" in read(jidx), "split rewrites index link", read(jidx))
+
+    # C) prune（报告 → 打包 → 移出）
+    r = run(tmp, "prune")
+    ok(r.returncode == 0 and "冷存候选" in r.stdout, "prune reports candidates", r.stdout)
+    before = read(jidx)
+    ok(read(jidx) == before, "prune report-only changes nothing")
+    zpath = os.path.join(tmp, "cold.zip")
+    r = run(tmp, "prune", "--zip", zpath)
+    ok(os.path.exists(zpath), "prune --zip writes archive", r.stdout)
+    ok(os.path.exists(os.path.join(tmp, "journal", "archive", "stageA", "0005-old.md")),
+       "prune --zip keeps originals")
+    r = run(tmp, "prune", "--zip", zpath, "--apply")
+    ok(not os.path.exists(os.path.join(tmp, "journal", "archive", "stageA", "0005-old.md")),
+       "prune --apply moves originals out", r.stdout)
+    ok(os.path.exists(os.path.join(tmp, "journal", "archive", "COLD-STORE.md")),
+       "prune writes a manifest")
+    ok(os.path.exists(os.path.join(tmp, "journal", "2026", "0002-beta.md")),
+       "prune keeps cited/active entry")
+
+    r = run(tmp, "check", "--strict", "--quiet")
+    ok(r.returncode == 0, "check --strict clean after cleanup ops", r.stdout + r.stderr)
 
 
 def main() -> int:
@@ -211,6 +307,9 @@ def main() -> int:
         ok(r.returncode == 0, "check --strict clean (coding + non-coding)", r.stdout + r.stderr)
         r = run(tmp, "lint", "--strict")
         ok(r.returncode == 0, "lint clean (coding + non-coding)", r.stdout + r.stderr)
+
+        # A/B/C/D 整理能力（独立夹具，避免干扰上面的用例）---------------------------
+        cleanup_phase(tmp)
 
         # CRLF fidelity ----------------------------------------------------
         index_path = os.path.join(tmp, "journal", "README.md")

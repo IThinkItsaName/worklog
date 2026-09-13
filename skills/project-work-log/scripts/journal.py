@@ -41,6 +41,7 @@ import json
 import os
 import re
 import sys
+import zipfile
 
 try:  # Windows 控制台默认码页可能不是 UTF-8
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -169,8 +170,71 @@ def find_entries(journal: str) -> dict[int, list[str]]:
     return found
 
 
-def is_root_entry(journal: str, path: str) -> bool:
-    return os.path.dirname(os.path.abspath(path)) == os.path.abspath(journal)
+def is_active_entry(journal: str, path: str) -> bool:
+    """活跃记录 = 不在 archive/ 下。
+
+    与旧版"必须在 journal 根目录"不同：按年分卷后的 `journal/2026/NNNN-x.md` 仍算活跃。
+    """
+    archive = os.path.abspath(os.path.join(journal, "archive"))
+    try:
+        return os.path.relpath(os.path.abspath(path), archive).startswith("..")
+    except ValueError:      # 不同盘符
+        return True
+
+
+def entry_link(journal: str, path: str) -> str:
+    """索引行里用的链接（相对 journal 根），天然支持分卷后的 `<year>/NNNN-x.md`。"""
+    return rel(journal, path)
+
+
+def _under(path: str, parent: str) -> bool:
+    """path 是否在 parent 目录内（大小写无关，Windows 友好）。"""
+    p = os.path.normcase(os.path.abspath(path))
+    q = os.path.normcase(os.path.abspath(parent))
+    return p == q or p.startswith(q + os.sep)
+
+
+def rewrite_links(base_dirs: list[str], moves: dict[str, str], dry_run: bool = False
+                  ) -> list[tuple[str, str, str]]:
+    """把指向旧文件名的相对链接改指到新位置，返回 [(文件, 旧链接, 新链接)]。
+
+    `moves` = {旧文件名: 新绝对路径}。只改 .md 里的 markdown 链接；
+    `wl/NNNN` 这类纯编号引用不受目录变化影响，故意不动。
+    """
+    changed: list[tuple[str, str, str]] = []
+
+    def fixer(path: str, base: str):
+        def sub(m: re.Match) -> str:
+            target = m.group(1)
+            if target.startswith(("http://", "https://", "mailto:", "#")):
+                return m.group(0)
+            anchor = ""
+            if "#" in target:
+                target, anchor = target.split("#", 1)
+                anchor = "#" + anchor
+            new_path = moves.get(os.path.basename(target))
+            if new_path is None:
+                return m.group(0)
+            new_target = os.path.relpath(new_path, os.path.dirname(path)).replace(os.sep, "/") + anchor
+            if new_target != m.group(1):
+                changed.append((rel(base, path), m.group(1), new_target))
+            return f"]({new_target})"
+        return sub
+
+    for base in base_dirs:
+        if not base or not os.path.isdir(base):
+            continue
+        for dp, dn, fn in os.walk(base):
+            dn[:] = [d for d in dn if d not in (".git", "node_modules")]
+            for f in fn:
+                if not f.endswith(".md"):
+                    continue
+                path = os.path.join(dp, f)
+                text = read_raw(path)
+                new_text = LINK_RE.sub(fixer(path, base), text)
+                if new_text != text and not dry_run:
+                    write_raw(path, new_text)
+    return changed
 
 
 def max_date_in(text: str) -> _dt.date | None:
@@ -385,8 +449,8 @@ def check(root: str, journal_arg: str | None, lessons_arg: str | None, strict: b
         idx_text = read(index)
         _check_links(root, index, rep)
         for n in nums:
-            if is_root_entry(journal, entries[n][0]) and os.path.basename(entries[n][0]) not in idx_text:
-                rep.add("WARN", jname, f"记录 {os.path.basename(entries[n][0])} 未出现在索引中")
+            if is_active_entry(journal, entries[n][0]) and entry_link(journal, entries[n][0]) not in idx_text:
+                rep.add("WARN", jname, f"记录 {entry_link(journal, entries[n][0])} 未出现在索引中")
         blocks = re.findall(r"^#{2,3}\s*.*当前状态.*$", idx_text, re.M)
         if not blocks:
             rep.add("WARN", jname, f"索引缺 `## {K_STATUS}` 块")
@@ -521,9 +585,9 @@ def cmd_brief(args: argparse.Namespace) -> int:
         return 1
     entries = find_entries(journal)
     nums = sorted(entries)
-    root_nums = [n for n in nums if is_root_entry(journal, entries[n][0])]
+    root_nums = [n for n in nums if is_active_entry(journal, entries[n][0])]
     print(f"# BRIEF  {rel(root, journal)}  ({len(nums)} entries #{nums[0] if nums else '-'}–#{nums[-1] if nums else '-'};"
-          f" root {len(root_nums)} / archive {len(nums) - len(root_nums)})")
+          f" active {len(root_nums)} / archive {len(nums) - len(root_nums)})")
     sb = status_block_text(journal)
     if sb:
         lines = sb.splitlines()
@@ -643,8 +707,8 @@ def index_sync(journal: str, only: list[int] | None = None, stage: str | None = 
     lines = text.splitlines(keepends=True)
     nl = nl_of(text)
     entries = find_entries(journal)
-    root_nums = [n for n in sorted(entries) if is_root_entry(journal, entries[n][0])]
-    missing = [n for n in root_nums if os.path.basename(entries[n][0]) not in text]
+    root_nums = [n for n in sorted(entries) if is_active_entry(journal, entries[n][0])]
+    missing = [n for n in root_nums if entry_link(journal, entries[n][0]) not in text]
     if only is not None:
         missing = [n for n in missing if n in only]
     if not missing:
@@ -667,7 +731,7 @@ def index_sync(journal: str, only: list[int] | None = None, stage: str | None = 
     new_lines = []
     for n in missing:
         m = meta_of(entries[n][0])
-        fname = os.path.basename(entries[n][0])
+        fname = entry_link(journal, entries[n][0])
         label = aspect or m["conclusion"] or m["title"]
         label = re.sub(r"\s+", " ", label).strip()[:60] or m["title"][:60]
         new_lines.append(f"| [{fname}]({fname}) | {label} |{nl}")
@@ -713,6 +777,89 @@ def cmd_new(args: argparse.Namespace) -> int:
         print(f"| [{fname}]({fname}) | {args.title} |")
     if slug == "entry":
         print("提示：标题没有可用的 ASCII slug，建议用 --slug 指定。")
+    return 0
+
+
+def cmd_index_compact(args: argparse.Namespace) -> int:
+    """把「整节都已归档」的索引小节折叠成一行区间——治索引的线性膨胀。
+
+    只动索引，不动任何记录；混合（含活跃记录）或有死链的小节一律跳过。
+    """
+    root = os.path.abspath(args.root)
+    journal = resolve_dir(root, args.journal, ("journal", "work-log"))
+    if not journal:
+        print("ERROR: 找不到记录目录")
+        return 1
+    index = os.path.join(journal, "README.md")
+    text = read_raw(index)
+    lines = text.splitlines(keepends=True)
+    nl = nl_of(text)
+    span = find_section(lines, 2, "文件索引")
+    if not span:
+        print("ERROR: 索引里没有 `## 文件索引` 小节")
+        return 1
+    archive_root = os.path.join(journal, "archive")
+
+    stages: list[tuple[int, int, str]] = []
+    i = span[1]
+    while i < span[2]:
+        h = heading_level(lines[i])
+        if h and h[0] == 3:
+            j = i + 1
+            while j < span[2]:
+                hj = heading_level(lines[j])
+                if hj and hj[0] <= 3:
+                    break
+                j += 1
+            stages.append((i, j, h[1]))
+            i = j
+        else:
+            i += 1
+
+    done: list[tuple[str, str, str]] = []
+    skipped: list[tuple[str, str]] = []
+    for head_i, end_i, title in reversed(stages):
+        if args.stage and args.stage not in title:
+            continue
+        rows = [k for k in range(head_i + 1, end_i)
+                if lines[k].lstrip().startswith("|") and "](" in lines[k]]
+        if not rows:
+            continue
+        targets = [LINK_RE.search(lines[k]).group(1).split("#")[0] for k in rows]
+        resolved = [os.path.normpath(os.path.join(journal, t)) for t in targets]
+        if not all(_under(p, archive_root) for p in resolved):
+            skipped.append((title, "含活跃记录"))
+            continue
+        if not all(os.path.exists(p) for p in resolved):
+            skipped.append((title, "有死链，先修链接"))
+            continue
+        dirs = {os.path.dirname(t).replace(os.sep, "/") for t in targets}
+        if len(dirs) != 1:
+            skipped.append((title, "跨多个归档目录"))
+            continue
+        nums = [int(m.group(1)) for t in targets
+                if (m := ENTRY_RE.match(os.path.basename(t)))]
+        common = dirs.pop()
+        label = (f"{min(nums)}–{max(nums)}（{len(rows)} 篇，已归档）" if nums
+                 else f"{len(rows)} 篇，已归档")
+        new_row = f"| [{common}/]({common}/) | {label} |{nl}"
+        old_block = "".join(lines[rows[0]:rows[-1] + 1])
+        done.append((title, old_block, new_row))
+        if not args.dry_run:
+            lines[rows[0]:rows[-1] + 1] = [new_row]
+
+    before = len(text)
+    after = before - sum(len(o) - len(n) for _, o, n in done)
+    print(f"{'[dry-run] ' if args.dry_run else ''}折叠 {len(done)} 个小节、"
+          f"{sum(o.count(chr(10)) for _, o, _ in done)} 行 → {len(done)} 行；"
+          f"索引 {before} → {after} 字符（省 {before - after}）")
+    for title, old_block, _ in done:
+        print(f"  · {title}：{old_block.count(chr(10))} 行 → 1 行")
+    for title, why in skipped:
+        print(f"  ! 跳过 {title}：{why}")
+    if done and not args.dry_run:
+        write_raw(index, "".join(lines))
+        print("已写入；建议接着跑 `check` 确认 0 死链。")
     return 0
 
 
@@ -911,6 +1058,295 @@ def cmd_append(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# archive / split / prune：记录量增长后的整理
+# --------------------------------------------------------------------------- #
+def _dead_links(root: str, bases: list[str]) -> list[str]:
+    """扫一遍 md 链接，返回死链描述（用于搬文件后的自检）。"""
+    rep = Report(False)
+    for base in bases:
+        if not base or not os.path.isdir(base):
+            continue
+        for dp, dn, fn in os.walk(base):
+            dn[:] = [d for d in dn if d not in (".git", "node_modules")]
+            for f in fn:
+                if f.endswith(".md"):
+                    _check_links(root, os.path.join(dp, f), rep)
+    return [txt for lv, txt in rep.rows if lv == "ERROR"]
+
+
+def _update_archive_index(journal: str, stage: str, nums: list[int], dates: list[str]) -> None:
+    """在 `journal/archive/README.md` 里补一行归档记录（不存在则建表）。"""
+    path = os.path.join(journal, "archive", "README.md")
+    text = read_raw(path) if os.path.exists(path) else ""
+    nl = nl_of(text) if text else "\n"
+    lines = text.splitlines(keepends=True)
+    if not text:
+        lines = [f"# 归档区{nl}", nl,
+                 f"| 目录 | 篇号 | 时间 | 内容 | 归档判据 |{nl}",
+                 f"|---|---|---|---|---|{nl}"]
+    ds = sorted(d for d in dates if d)
+    span = f"{ds[0]} ~ {ds[-1]}" if ds else "-"
+    entry = (f"| `{stage}/` | {min(nums):04d}–{max(nums):04d} | {span} | "
+             f"{len(nums)} 篇 | 阶段收口 |{nl}")
+    rows = [i for i, l in enumerate(lines) if l.lstrip().startswith("|")]
+    if rows:
+        lines.insert(rows[-1] + 1, entry)
+    else:
+        if lines and lines[-1].strip():
+            lines.append(nl)
+        lines.append(entry)
+    write_raw(path, "".join(lines))
+
+
+def cmd_archive(args: argparse.Namespace) -> int:
+    """把一个篇号区间归档到 `journal/archive/<stage>/`，并重写全仓链接。
+
+    搬完自动做一次死链自检；有死链就报错退出（内容都在，可 git 回退）。
+    """
+    root = os.path.abspath(args.root)
+    journal = resolve_dir(root, args.journal, ("journal", "work-log"))
+    if not journal:
+        print("ERROR: 找不到记录目录")
+        return 1
+    lessons = resolve_dir(root, args.lessons, ("lessons",))
+    stage = args.stage.strip()
+    if not stage or re.search(r"[/\\:]", stage):
+        print("ERROR: --stage 只能是不含路径分隔符的名字，如 02-research")
+        return 1
+    entries = find_entries(journal)
+    picked = [(n, p[0]) for n, p in sorted(entries.items())
+              if args.from_num <= n <= args.to_num and is_active_entry(journal, p[0])]
+    if not picked:
+        print(f"ERROR: {args.from_num}–{args.to_num} 区间内没有活跃记录")
+        return 1
+    target_dir = os.path.join(journal, "archive", stage)
+    moves = {os.path.basename(p): os.path.join(target_dir, os.path.basename(p))
+             for _, p in picked}
+    for dst in moves.values():
+        if os.path.exists(dst):
+            print(f"ERROR: 目标已存在，先处理冲突：{rel(root, dst)}")
+            return 1
+    bases = [journal] + ([lessons] if lessons else [])
+    nums = [n for n, _ in picked]
+    dates = [meta_of(p)["date"] for _, p in picked]
+
+    if args.dry_run:
+        changed = rewrite_links(bases, moves, dry_run=True)
+        print(f"[dry-run] 将移动 {len(picked)} 篇 → {rel(root, target_dir)}：")
+        for n, p in picked:
+            print(f"  #{n:04d}  {os.path.basename(p)}")
+        print(f"将重写 {len(changed)} 处链接：")
+        for f, a, b in changed[:20]:
+            print(f"  {f}: {a} → {b}")
+        if len(changed) > 20:
+            print(f"  … 另 {len(changed) - 20} 处")
+        return 0
+
+    os.makedirs(target_dir, exist_ok=True)
+    for _, p in picked:
+        os.rename(p, os.path.join(target_dir, os.path.basename(p)))
+    changed = rewrite_links(bases, moves, dry_run=False)
+    if not args.no_index:
+        _update_archive_index(journal, stage, nums, dates)
+
+    dead = _dead_links(root, bases)
+    print(f"移动 {len(picked)} 篇 → {rel(root, target_dir)}；"
+          f"重写 {len(changed)} 处链接；死链 {len(dead)}")
+    for txt in dead[:10]:
+        print("  " + txt)
+    if dead:
+        print("⚠️ 仍有死链：内容都在，检查上面的链接（可用 git 回退）")
+        return 1
+    print(f"完成。建议接着跑 `index compact --stage {stage}` 折叠索引行，再跑 `check`。")
+    return 0
+
+
+def cmd_split(args: argparse.Namespace) -> int:
+    """按年分卷：把活跃记录移进 `journal/<YYYY>/`（取自入口行的 `日期：`），并重写链接。
+
+    适合超长期项目（上千篇）；纯编号引用 `wl/NNNN` 不受影响。
+    """
+    root = os.path.abspath(args.root)
+    journal = resolve_dir(root, args.journal, ("journal", "work-log"))
+    if not journal:
+        print("ERROR: 找不到记录目录")
+        return 1
+    if not args.by_year:
+        print("ERROR: 目前只支持 `--by-year`")
+        return 1
+    lessons = resolve_dir(root, args.lessons, ("lessons",))
+    entries = find_entries(journal)
+    plan: list[tuple[int, str, str, str]] = []
+    skipped: list[tuple[int, str]] = []
+    moves: dict[str, str] = {}
+    for n, paths in sorted(entries.items()):
+        p = paths[0]
+        if not is_active_entry(journal, p):
+            continue
+        d = meta_of(p)["date"]
+        if not ISO_DATE_RE.fullmatch(d or ""):
+            skipped.append((n, d or "(无日期)"))
+            continue
+        year = d[:4]
+        target = os.path.join(journal, year, os.path.basename(p))
+        if os.path.abspath(os.path.dirname(p)) == os.path.abspath(os.path.join(journal, year)):
+            continue
+        if os.path.exists(target):
+            print(f"ERROR: 目标已存在，先处理冲突：{rel(root, target)}")
+            return 1
+        moves[os.path.basename(p)] = target
+        plan.append((n, p, target, year))
+
+    if not plan:
+        print("没有需要移动的记录" + (f"（{len(skipped)} 篇无日期已跳过）" if skipped else ""))
+        for n, d in skipped:
+            print(f"  ! 跳过 #{n:04d}（{d}）")
+        return 0
+
+    bases = [journal] + ([lessons] if lessons else [])
+    by_year: dict[str, int] = {}
+    for _, _, _, y in plan:
+        by_year[y] = by_year.get(y, 0) + 1
+    summary = "、".join(f"{y}/（{c} 篇）" for y, c in sorted(by_year.items()))
+
+    if args.dry_run:
+        changed = rewrite_links(bases, moves, dry_run=True)
+        print(f"[dry-run] 将把 {len(plan)} 篇分卷到 {summary}")
+        for n, p, _, y in plan[:20]:
+            print(f"  #{n:04d}  {os.path.basename(p)} → {y}/")
+        if len(plan) > 20:
+            print(f"  … 另 {len(plan) - 20} 篇")
+        print(f"将重写 {len(changed)} 处链接")
+        return 0
+
+    for _, p, target, _ in plan:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        os.rename(p, target)
+    changed = rewrite_links(bases, moves, dry_run=False)
+    dead = _dead_links(root, bases)
+    print(f"分卷 {len(plan)} 篇 → {summary}；重写 {len(changed)} 处链接；死链 {len(dead)}")
+    for n, d in skipped:
+        print(f"  ! 跳过 #{n:04d}（{d}）")
+    for txt in dead[:10]:
+        print("  " + txt)
+    if dead:
+        print("⚠️ 仍有死链：内容都在，可用 git 回退")
+        return 1
+    print("完成。建议跑 `check` 确认。")
+    return 0
+
+
+def _remove_index_rows(journal: str, basenames: set[str]) -> int:
+    """删掉索引里指向这些文件的行（冷存移出后用）。返回删除行数。"""
+    index = os.path.join(journal, "README.md")
+    text = read_raw(index)
+    if not text:
+        return 0
+    kept, removed = [], 0
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith("|") and "](" in line:
+            m = LINK_RE.search(line)
+            if m and os.path.basename(m.group(1).split("#")[0]) in basenames:
+                removed += 1
+                continue
+        kept.append(line)
+    if removed:
+        write_raw(index, "".join(kept))
+    return removed
+
+
+def _append_row_after_table(path: str, default_text: str, row: str) -> None:
+    """给一个 markdown 表格追加一行（文件不存在则用 default_text 建表）。"""
+    text = read_raw(path) if os.path.exists(path) else ""
+    nl = nl_of(text) if text else "\n"
+    lines = text.splitlines(keepends=True)
+    if not text:
+        lines = default_text.replace("\n", nl).splitlines(keepends=True)
+    rows = [i for i, l in enumerate(lines) if l.lstrip().startswith("|")]
+    if rows:
+        lines.insert(rows[-1] + 1, row + nl)
+    else:
+        if lines and lines[-1].strip():
+            lines.append(nl)
+        lines.append(row + nl)
+    write_raw(path, "".join(lines))
+
+
+def cmd_prune(args: argparse.Namespace) -> int:
+    """冷存候选：默认**只报告**；`--zip` 打包；`--apply` 才把原件移出并写清单。
+
+    判据：已归档 + 未被 lessons 引用 + 日期早于 `--older-than` 天。
+    绝不直接删除：移出到冷存目录，并在 `journal/archive/COLD-STORE.md` 留行。
+    """
+    root = os.path.abspath(args.root)
+    journal = resolve_dir(root, args.journal, ("journal", "work-log"))
+    if not journal:
+        print("ERROR: 找不到记录目录")
+        return 1
+    if args.apply and not args.zip:
+        print("ERROR: --apply 必须配合 --zip（先打包再移出，保证有备份）")
+        return 1
+    lessons = resolve_dir(root, args.lessons, ("lessons",))
+    cited: set[int] = set()
+    if lessons:
+        for f in sorted(os.listdir(lessons)):
+            if f.endswith(".md"):
+                cited |= {int(x) for x in CITE_RE.findall(read(os.path.join(lessons, f)))}
+    cutoff = _dt.date.today() - _dt.timedelta(days=args.older_than)
+    cands: list[tuple[int, str, str, int]] = []
+    for n, paths in sorted(find_entries(journal).items()):
+        p = paths[0]
+        if is_active_entry(journal, p) or n in cited:
+            continue
+        d = meta_of(p)["date"]
+        if not ISO_DATE_RE.fullmatch(d or "") or _dt.date.fromisoformat(d) > cutoff:
+            continue
+        if args.stage and args.stage not in rel(journal, p):
+            continue
+        cands.append((n, p, d, os.path.getsize(p)))
+    total = sum(c[3] for c in cands)
+    print(f"冷存候选（已归档 + 未被 lessons 引用 + 早于 {cutoff}）：{len(cands)} 篇 / {total} B")
+    for n, p, d, sz in cands:
+        print(f"  #{n:04d}  {d}  {sz:>7} B  {rel(root, p)}")
+    if not cands:
+        print("没有候选，无需处理。")
+        return 0
+    if not args.zip:
+        print("\n（只报告，未改动任何文件。加 `--zip OUT.zip` 打包；再加 `--apply` 才移出原件。）")
+        return 0
+
+    zp = os.path.abspath(args.zip)
+    with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as z:
+        for _, p, _, _ in cands:
+            z.write(p, rel(root, p))
+    print(f"已打包 → {rel(root, zp) if _under(zp, root) else zp}（{os.path.getsize(zp)} B）")
+    if not args.apply:
+        print("（原件未动。加 `--apply` 才会移出并写清单。）")
+        return 0
+
+    cold = os.path.abspath(args.cold_store or os.path.join(root, "_coldstore", today()))
+    for _, p, _, _ in cands:
+        dst = os.path.join(cold, rel(root, p).replace("/", os.sep))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        os.rename(p, dst)
+    removed = _remove_index_rows(journal, {os.path.basename(p) for _, p, _, _ in cands})
+    _append_row_after_table(
+        os.path.join(journal, "archive", "COLD-STORE.md"),
+        "# 冷存清单\n\n| 执行日期 | 篇号 | 篇数 | 冷存目录 | 打包文件 | 判据 |\n|---|---|---|---|---|---|\n",
+        f"| {today()} | {min(n for n, _, _, _ in cands):04d}–{max(n for n, _, _, _ in cands):04d} "
+        f"| {len(cands)} | `{cold}` | `{zp}` | 阶段收口 + 未被 lessons 引用 + 超期 |")
+    dead = _dead_links(root, [journal] + ([lessons] if lessons else []))
+    print(f"已移出 {len(cands)} 篇 → {cold}；索引删行 {removed}；死链 {len(dead)}")
+    for txt in dead[:10]:
+        print("  " + txt)
+    if dead:
+        print("⚠️ 仍有死链：检查索引里是否还指向冷存文件")
+        return 1
+    print("完成。清单见 journal/archive/COLD-STORE.md。")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
 # lesson add
 # --------------------------------------------------------------------------- #
 def cmd_lesson(args: argparse.Namespace) -> int:
@@ -991,13 +1427,13 @@ def cmd_stats(args: argparse.Namespace) -> int:
         print("没有记录")
         return 0
     metas = all_metas(entries)
-    root_nums = [n for n in nums if is_root_entry(journal, entries[n][0])]
+    root_nums = [n for n in nums if is_active_entry(journal, entries[n][0])]
     dates = [max_date_in(read(entries[n][0])) for n in nums]
     dates = [d for d in dates if d]
     total_bytes = sum(m["bytes"] for m in metas.values())
     total_lines = sum(m["lines"] for m in metas.values())
     biggest = max(nums, key=lambda n: metas[n]["bytes"])
-    print(f"entries     : {len(nums)}  (#{nums[0]}–#{nums[-1]}; root {len(root_nums)} / archive {len(nums) - len(root_nums)})")
+    print(f"entries     : {len(nums)}  (#{nums[0]}–#{nums[-1]}; active {len(root_nums)} / archive {len(nums) - len(root_nums)})")
     if dates:
         span_days = (max(dates) - min(dates)).days + 1
         print(f"date span   : {min(dates)} .. {max(dates)}  ({span_days} days, {len(dates)} dated)")
@@ -1271,6 +1707,27 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--drop-done", action="store_true")
     p.add_argument("--dry-run", action="store_true")
 
+    p_arch = add("archive", cmd_archive, "把篇号区间归档到 archive/<stage>/（含链接重写）")
+    p_arch.add_argument("--stage", required=True)
+    p_arch.add_argument("--from", dest="from_num", type=int, required=True)
+    p_arch.add_argument("--to", dest="to_num", type=int, required=True)
+    p_arch.add_argument("--no-index", action="store_true", help="不更新 archive/README.md")
+    p_arch.add_argument("--dry-run", action="store_true")
+
+    p_split = add("split", cmd_split, "按年分卷（把记录移进 journal/<YYYY>/）")
+    p_split.add_argument("--by-year", action="store_true", required=True,
+                         help="目前只支持按年分卷（必须显式指定）")
+    p_split.add_argument("--dry-run", action="store_true")
+
+    p_prune = add("prune", cmd_prune, "冷存候选：报告 / 打包 / 移出（默认只报告）")
+    p_prune.add_argument("--older-than", dest="older_than", type=int, default=180,
+                         help="只考虑早于 N 天的记录（默认 180）")
+    p_prune.add_argument("--stage", default=None, help="只处理归档路径含该子串的记录")
+    p_prune.add_argument("--zip", default=None, help="把候选打包成 zip")
+    p_prune.add_argument("--apply", action="store_true", help="打包后把原件移出（必须配合 --zip）")
+    p_prune.add_argument("--cold-store", dest="cold_store", default=None,
+                         help="冷存目录，默认 <项目>/_coldstore/<日期>/")
+
     p_index = sub.add_parser("index", help="索引维护")
     _add_common(p_index)
     _add_root(p_index)
@@ -1281,6 +1738,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync.add_argument("--aspect", default=None)
     p_sync.add_argument("--dry-run", action="store_true")
     p_sync.set_defaults(func=cmd_index)
+
+    p_compact = isub.add_parser("compact", help="把已归档阶段的逐条行折叠成区间行（索引瘦身）")
+    _add_common(p_compact)
+    p_compact.add_argument("--stage", default=None, help="只处理标题含该子串的小节")
+    p_compact.add_argument("--dry-run", action="store_true")
+    p_compact.set_defaults(func=cmd_index_compact)
 
     p_lesson = sub.add_parser("lesson", help="经验层维护")
     _add_common(p_lesson)

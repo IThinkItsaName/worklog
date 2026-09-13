@@ -6,7 +6,7 @@
 
 ```bash
 python scripts/journal.py --help          # 命令总览
-python scripts/_selftest.py               # 自测：临时工程跑通全部命令（36 项，含非编程场景）
+python scripts/_selftest.py               # 自测：临时工程跑通全部命令（53 项，含非编程场景与整理能力）
 ```
 
 ## 一、少读：把上下文留给真正要看的内容
@@ -36,7 +36,25 @@ python scripts/_selftest.py               # 自测：临时工程跑通全部命
 - `lesson add` 的 `--source` 必须指向真实存在的篇号，否则拒绝写入（防止无主结论）。
 - `append` 若目标小节已存在则追加到该小节末尾，不会重复建标题。
 
-## 三、可校验：两道门禁
+## 三、整理与清理（记录量增长后）
+
+记录本身涨得温和（约 5 KB/篇），**真正膨胀的是索引**（每篇约 600 字符）。下面四个命令把"整理"从人工步骤变成可复现动作，
+全部支持 `--dry-run`，而且**只搬不删**：
+
+| 命令 | 作用 | 典型用法 |
+|---|---|---|
+| `index compact` | **索引瘦身**：把「整节都已归档」的小节折叠成一行区间（`\| [archive/xx/](archive/xx/) \| 01–26（26 篇，已归档） \|`）。只动索引；混合小节或含死链的小节自动跳过 | `index compact --dry-run` / `index compact --stage A` |
+| `archive` | **归档**：把篇号区间移进 `journal/archive/<stage>/`，自动重写全仓链接（索引 / lessons / 其他记录）、补 `archive/README.md` 一行，并做**死链自检** | `archive --stage 02-research --from 27 --to 45` |
+| `split` | **按年分卷**：把活跃记录移进 `journal/<YYYY>/`（取自入口行的 `日期：`），重写链接。适合上千篇的超长期项目 | `split --by-year --dry-run` |
+| `prune` | **冷存**：列出「已归档 + 未被 lessons 引用 + 超期」的候选；`--zip` 打包；`--apply` 才把原件移出并写 `COLD-STORE.md` 清单。**默认只报告** | `prune` → `prune --zip cold.zip` → `... --apply` |
+
+推荐顺序：**`archive` → `index compact` →（很久以后）`prune`**；记录过万再考虑 `split --by-year`。
+
+> 铁律：**证据不删**。`prune --apply` 是"移出到冷存目录 + 留清单"，不是删除；真要删由人工确认后自己动手。
+> 搬动前后都会扫一遍 md 链接，有死链直接报错退出（内容仍在，git 可回退）。
+> `wl/NNNN` 这类纯编号引用**不受目录变化影响**——这正是"编号即地址"的价值。
+
+## 四、可校验：两道门禁
 
 | 命令 | 检查内容 | 退出码 |
 |---|---|---|
@@ -50,7 +68,7 @@ python scripts/_selftest.py               # 自测：临时工程跑通全部命
 > “验证”小节接受 `验证 / 复核 / 检查 / 评审 / 结果 / 证据 / 评估 / 确认`；
 > `lint` 的“可核对内容”包括命令、数字、链接——不强制要求可执行命令。
 
-## 四、分析与生成：不止于记账
+## 五、分析与生成：不止于记账
 
 | 命令 | 作用 | 典型用法 |
 |---|---|---|
@@ -62,7 +80,7 @@ python scripts/_selftest.py               # 自测：临时工程跑通全部命
 
 `topics` 的自动模式只认 ASCII 标识符（文件名、编号、专有名词、错误码），中文主题请用 `--keywords`——这是无依赖环境下的取舍，已在输出里说明。
 
-## 五、组合套路（省上下文的标准动作）
+## 六、组合套路（省上下文的标准动作）
 
 ```bash
 # 1. 接手：一屏拿到坐标
@@ -83,7 +101,7 @@ python scripts/journal.py retro --from 100 --to 151 --out lessons/99-retrospecti
 python scripts/journal.py digest --out HANDOFF.md
 ```
 
-## 六、内部脚本
+## 七、内部脚本
 
 | 文件 | 用途 |
 |---|---|

@@ -86,7 +86,7 @@ git tag -a v0.1.1 -m "v0.1.1" && git push origin v0.1.1   # 有行为变化时
 cd <工作区>/publish/worklog
 
 # 包内路径下也能跑通（验证相对路径没有写死）
-python skills/project-work-log/scripts/_selftest.py        # 期望 36/36 passed
+python skills/project-work-log/scripts/_selftest.py        # 期望 53/53 passed
 
 # 源与包没有漂移
 python ../../.pi/skills/project-work-log/scripts/_package.py --check

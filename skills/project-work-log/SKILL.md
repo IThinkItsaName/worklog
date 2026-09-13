@@ -82,11 +82,22 @@ description: 为长期项目建立并维护工作记录体系（过程记录 jou
 5. 校验：`python scripts/journal.py check <项目根>` 必须 **0 error**（新项目/CI 加 `--strict`，warning 逐条判断）。
 6. 提交：代码与文档一起提交；提交信息引用篇号（如 `journal: 0042 ...`）。
 
-## 工作流 D · 归档与复盘
+## 工作流 D · 归档、瘦身与复盘
 
-- **归档判据 = 阶段收口**（某个阶段结束、索引表不再增长），不再用"多少天没引用"这类经验值。
-- 归档：整阶段 move 到 `journal/archive/<stage>/` → 改索引链接 → 写归档索引 → 跑 `check` 确认 0 死链。
-- 复盘：写进 `lessons/99-retrospectives.md`（阶段表 / 成果 / 可复用发现 / 遗留），**不要**另建 SUMMARY 文档到处写同一批数字。
+- **归档判据 = 阶段收口**（某个阶段结束、索引表不再增长），不用"多少天没引用"这类经验值。
+- 归档 → 瘦身 → 复盘，三步都是命令，不再手工搬文件：
+
+```bash
+python scripts/journal.py archive --stage 02-research --from 27 --to 45   # 搬 + 全仓链接重写 + 死链自检
+python scripts/journal.py index compact --stage 02-research               # 已归档小节折叠成一行区间
+python scripts/journal.py retro --from 27 --to 45 --out /tmp/retro.md     # 阶段复盘骨架
+```
+
+- 很久以后，已归档、又没人引用的记录可以**冷存**（默认只报告，打包后才移出，**绝不直接删**）：
+  `prune` → `prune --zip cold.zip` → `prune --zip cold.zip --apply`
+- 记录成千上万时用 `split --by-year` 按年分卷（`wl/NNNN` 回指不受目录变化影响）。
+- 复盘写进 `lessons/99-retrospectives.md`（阶段表 / 成果 / 可复用发现 / 遗留），**不要**另建 SUMMARY 文档到处写同一批数字。
+- 铁律：**证据不删**——整理永远是"移走 + 汇总 + 留清单"；搬动后必跑 `check` 确认 0 死链。
 
 ## 工具（`scripts/journal.py`，纯标准库）
 
@@ -109,6 +120,12 @@ python scripts/journal.py index sync --stage "B. 迭代"            # 补漏掉�
 python scripts/journal.py lesson add --volume 04-verification-and-safety.md --source 152 --text "…"
 python scripts/journal.py append 42 --section 更正 --text "…" --bullet
 
+# —— 整理与清理：只搬不删，全部支持 --dry-run ——
+python scripts/journal.py archive --stage 02-research --from 27 --to 45   # 归档 + 链接重写 + 死链自检
+python scripts/journal.py index compact --stage 02-research               # 索引瘦身（已归档小节→一行）
+python scripts/journal.py split --by-year --dry-run                       # 按年分卷（超长期）
+python scripts/journal.py prune                                           # 冷存候选（只报告）
+
 # —— 可校验：两道门禁（有 ERROR 退出码 1）——
 python scripts/journal.py check --strict        # 结构：编号/日期/验证/死链/漏索引/状态/来源
 python scripts/journal.py lint --strict         # 内容：占位符/空小节/结论无可核对信息/含糊措辞
@@ -121,7 +138,7 @@ python scripts/journal.py retro --from 100 --to 151 --out r.md  # 阶段复盘�
 python scripts/journal.py export --csv --out journal.csv   # 机器可读导出
 ```
 
-自测：`python scripts/_selftest.py`（临时工程跑通全部命令 + CRLF 保真 + 非编程场景，36 项）。
+自测：`python scripts/_selftest.py`（临时工程跑通全部命令 + CRLF 保真 + 非编程场景 + 整理能力，53 项）。
 
 > 典型接手动作：`brief` → `search` → `show` → 需要细节才 `read` 那一个文件。
 > 典型收尾动作：`new --insert` → 补正文 → `status` → `lesson add` → `check --strict` && `lint --strict`。
