@@ -6,7 +6,7 @@
 
 ```bash
 python scripts/journal.py --help          # 命令总览
-python scripts/_selftest.py               # 自测：临时工程跑通全部命令（53 项，含非编程场景与整理能力）
+python scripts/_selftest.py               # 自测：临时工程跑通全部命令（57 项，含非编程场景、整理能力与英文标签）
 ```
 
 ## 一、少读：把上下文留给真正要看的内容

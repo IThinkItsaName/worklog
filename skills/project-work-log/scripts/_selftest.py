@@ -145,6 +145,63 @@ def ok(cond: bool, label: str, detail: str = "") -> None:
     print(("PASS  " if cond else "FAIL  ") + label + (f"   [{detail[:200]}]" if detail and not cond else ""))
 
 
+EN_INDEX = """# English journal
+
+## Index
+
+### A. Stage
+
+| File | Note |
+|---|---|
+| [0001-alpha.md](0001-alpha.md) | a |
+
+## TODO
+
+- [ ] ship it
+
+## Status (2026-01-01)
+
+- Stage: v1
+"""
+
+EN_ENTRY = """# 0001 · Alpha
+
+Date: 2026-01-01
+Iteration: 5
+Trigger: kickoff
+Scope: none
+Conclusion: 312 tests green
+
+---
+
+## Verification
+
+- Command: `pytest -q`
+- Result: 312 passed
+"""
+
+
+def english_phase(parent: str) -> None:
+    """英文标签应能被解析（跨语言解析能力，P1）。"""
+    tmp = os.path.join(parent, "english")
+    os.makedirs(os.path.join(tmp, "journal"))
+    os.makedirs(os.path.join(tmp, "lessons"))
+    write(os.path.join(tmp, "journal", "README.md"), EN_INDEX)
+    write(os.path.join(tmp, "journal", "0001-alpha.md"), EN_ENTRY)
+    write(os.path.join(tmp, "lessons", "README.md"), LESSONS_INDEX)
+    write(os.path.join(tmp, "lessons", "01-topic.md"),
+          "# 01 · T\n\nSource: wl/0001.\n\n- **s**: a. cause: b. fix: c. (`wl/0001`)\n")
+
+    r = run(tmp, "check", "--strict", "--quiet")
+    ok(r.returncode == 0, "english labels: check --strict clean", r.stdout + r.stderr)
+    r = run(tmp, "lint", "--strict", "--quiet")
+    ok(r.returncode == 0, "english labels: lint --strict clean", r.stdout + r.stderr)
+    r = run(tmp, "outline")
+    ok("\t2026-01-01\t5\t" in r.stdout, "english labels: Date/Iteration parsed", r.stdout)
+    r = run(tmp, "brief", "--entries", "1")
+    ok("Status (2026-01-01)" in r.stdout, "english labels: Status block found", r.stdout)
+
+
 def cleanup_phase(parent: str) -> None:
     """A/B/C/D 四项整理能力：索引瘦身 / 归档 / 分卷 / 冷存。"""
     tmp = os.path.join(parent, "cleanup")
@@ -310,6 +367,9 @@ def main() -> int:
 
         # A/B/C/D 整理能力（独立夹具，避免干扰上面的用例）---------------------------
         cleanup_phase(tmp)
+
+        # 跨语言解析：英文标签（P1）-----------------------------------------
+        english_phase(tmp)
 
         # CRLF fidelity ----------------------------------------------------
         index_path = os.path.join(tmp, "journal", "README.md")

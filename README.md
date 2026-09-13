@@ -145,6 +145,20 @@ python skills/project-work-log/scripts/_selftest.py
 哪些做法有效（编号即地址、三层不互相复制、证据优先）、哪些会腐坏（台账漂移、格式漂移、双份数字）。
 详见 [`references/analysis.md`](skills/project-work-log/references/analysis.md)。
 
+## 支持矩阵（诚实标注验证情况）
+
+| 维度 | 支持 | 验证情况 |
+|---|---|---|
+| **Python** | 3.7+ 语法 | 仅在 **3.12**（CI / Ubuntu）与 **3.14**（Windows 本机）实测；更低版本**未验证** |
+| 第三方依赖 | **无**（纯标准库） | 不需要 `pip install` |
+| 操作系统 | Windows / macOS / Linux | 无平台相关 API；CI 在 Ubuntu、本机在 Windows 实测通过 |
+| 字符编码 | UTF-8 文件 | 控制台编码无关（在 GBK 控制台下实测正常） |
+| **解析语言** | 中文默认 + **英文别名** | `日期/Date`、`结论/Conclusion`、`迭代/Iteration`、`验证/Verification`、`当前状态/Status`、`待办/TODO`、`文件索引/Index` 均可解析（英文 fixture 下 `check --strict` 与 `lint --strict` 均 0 error） |
+| 写入语言 | 中文（模板默认） | 要英文写入，改 `references/templates.md` 与 `journal.py` 的模板字符串 |
+| 命令执行 | 可选 | 无 Python / 不能执行命令时退化为纯规范，见 SKILL.md「没有 Python 怎么办」 |
+| harness | 任何支持 Agent Skills 的 | frontmatter 仅 `name` + `description`，且 name 与目录名一致 |
+| 外部程序 | 无（git 可选） | — |
+
 ## 更新日志
 
 版本变化见 [CHANGELOG.md](CHANGELOG.md)。

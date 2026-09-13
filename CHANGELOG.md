@@ -8,6 +8,20 @@
 
 ## [未发布]
 
+### 新增
+
+- **跨语言解析**：解析标签集中为常量并支持**英文别名**（写入仍默认中文）：
+  `日期/Date`、`结论/Conclusion`、`触发/Trigger`、`范围/Scope`、`迭代/Iteration`、
+  `验证/Verification`、`当前状态/Status`、`待办/TODO`、`文件索引/Index`——英文项目现在也能用 `check`/`lint`/`brief`
+- SKILL.md 新增「**没有 Python 怎么办**（降级路径）」：把 Python 从硬依赖降为可选加速器
+- README 新增「**支持矩阵**」：诚实标注验证范围（Python 3.12/3.14 实测、跨平台、UTF-8、双语解析）
+- `_measure.py` 参数化：`[ROOT] [--journal NAME] [--lessons NAME]`（默认自动识别 `journal/` 或 `work-log/`）
+
+### 变更
+
+- 自测 53 → **57** 项（新增 4 项英文标签用例）
+- `references/analysis.md` 的“验证小节”统计随词表放宽重测：88 → **95** / 106
+
 ## [0.1.0] - 2026-09-13
 
 首次发布。

@@ -138,10 +138,31 @@ python scripts/journal.py retro --from 100 --to 151 --out r.md  # 阶段复盘�
 python scripts/journal.py export --csv --out journal.csv   # 机器可读导出
 ```
 
-自测：`python scripts/_selftest.py`（临时工程跑通全部命令 + CRLF 保真 + 非编程场景 + 整理能力，53 项）。
+自测：`python scripts/_selftest.py`（临时工程跑通全部命令 + CRLF 保真 + 非编程场景 + 整理能力 + 英文标签，57 项）。
 
 > 典型接手动作：`brief` → `search` → `show` → 需要细节才 `read` 那一个文件。
 > 典型收尾动作：`new --insert` → 补正文 → `status` → `lesson add` → `check --strict` && `lint --strict`。
+
+## 没有 Python 怎么办（降级路径）
+
+**本技能的核心是约定，脚本只是加速器。** 环境里没有 Python 也能完整使用，只是费手：
+
+1. **建结构**：按 [references/templates.md](references/templates.md) 手工落 `journal/README.md`、`journal/archive/README.md`、`lessons/README.md`。
+2. **写记录**：按记录模板写入口 5 行 + 验证小节 + 遗留；标题固定 `# NNNN · 标题`。
+3. **收尾**：把「工作流 C 收尾清单」当人工检查表逐条走；把 `check` / `lint` 的判据（见 [references/commands.md](references/commands.md)）当核对清单。
+4. **检索导航**：用 `grep` / `rg` 代替 `search`，用索引表代替 `brief` / `outline`。
+5. **整理**：归档就是"移文件 + 改链接"，手工做时**先全仓 grep 链接再改**——脚本的价值主要就在这里（自动重写 + 死链自检）。
+
+脚本全部只用 Python 标准库，**不需要 `pip install`**；只要 Python 3 在 PATH 里就能跑（版本范围见 README 的支持矩阵）。
+若连命令都不能执行（纯聊天环境），技能退化为一份"怎么写记录"的规范——三层结构、收尾清单、归档判据仍然成立。
+
+## 环境边界（详见 README 的「支持矩阵」）
+
+- **纯标准库**，不需要 `pip install`；Python 3.7+ 语法，实测 3.12 / 3.14
+- Windows / macOS / Linux 均可（脚本无平台相关 API）
+- 文件用 UTF-8；控制台编码无关
+- **解析中英双语**（写入默认中文）：字段可写 `Date/Conclusion/Iteration/Status/TODO/Index`
+- 无 Python 或不能执行命令时，按上一节降级为纯规范使用
 
 ## 反模式（本工作区实测踩过的，别再来）
 

@@ -48,25 +48,46 @@ try:  # Windows 控制台默认码页可能不是 UTF-8
 except Exception:  # pragma: no cover
     pass
 
-# 约定关键词（与 references/conventions.md 保持一致）
-K_DATE = "日期"
-# 迭代字段：写入时用 K_ITER_DEFAULT，解析时接受下面这些别名
-# （软件项目叫"变更集/版本"，研究项目叫"批次/阶段"，写作项目可能叫"里程碑"…）
-K_ITER_DEFAULT = "迭代"
-K_ITER_ALIASES = ("迭代", "变更集", "批次", "阶段", "版本", "里程碑", "Iteration", "Milestone")
-K_VERIFY = "验证"
-# 哪些小节算"验证/复核"小节（不同领域叫法不同）
-VERIFY_WORDS = ("验证", "实测", "复核", "检查", "审查", "评审", "结果", "证据", "评估", "确认",
-                "Verification", "Review", "Results", "Evidence")
-K_STATUS = "当前状态"
-K_TODO = "待办"
+# ---- 解析标签（与 references/conventions.md 保持一致）----
+# 约定：**写入时用每组的第一项**（中文默认），**解析时接受全部别名**。
+# 这样非中文项目只要用别名（Date/Conclusion/Status/TODO…）就能被正确解析。
+L_DATE = ("日期", "Date")
+L_CONCLUSION = ("结论", "Conclusion", "Result")
+L_TRIGGER = ("触发", "Trigger", "Context")
+L_SCOPE = ("范围", "Scope")
+L_ITER = ("迭代", "变更集", "批次", "阶段", "版本", "里程碑", "Iteration", "Milestone")
+L_VERIFY = ("验证", "实测", "复核", "检查", "审查", "评审", "结果", "证据", "评估", "确认",
+            "Verification", "Review", "Results", "Evidence", "Tests")
+L_STATUS = ("当前状态", "Status", "Current Status")
+L_TODO = ("待办", "TODO", "Todo", "Tasks")
+L_INDEX = ("文件索引", "Index", "Contents", "File Index")
+
+
+def _any(aliases: tuple[str, ...]) -> str:
+    """把别名表编成正则的可选分支（非捕获），供解析用。"""
+    return "|".join(re.escape(a) for a in aliases)
+
+
+# 写入 / 显示用的默认名（各取第一个）
+K_DATE = L_DATE[0]
+K_ITER_DEFAULT = L_ITER[0]
+K_VERIFY = L_VERIFY[0]
+K_STATUS = L_STATUS[0]
+K_TODO = L_TODO[0]
+# 兼容旧名（内部与自测都在用）
+K_ITER_ALIASES = L_ITER
+VERIFY_WORDS = L_VERIFY
 
 ENTRY_RE = re.compile(r"^(\d+)-.*\.md$")
 HEADING_RE = re.compile(r"^#\s*(\d+)\s*[·.、:：]")
 H1_RE = re.compile(r"^#\s+(.+)$", re.M)
-DATE_LINE_RE = re.compile(r"^日期\s*[：:]\s*(\S+)", re.M)
+DATE_LINE_RE = re.compile(rf"^(?:{_any(L_DATE)})\s*[：:]\s*(\S+)", re.M)
+CONCLUSION_RE = re.compile(rf"^(?:{_any(L_CONCLUSION)})\s*[：:]\s*(.*)$", re.M)
+TRIGGER_RE = re.compile(rf"^(?:{_any(L_TRIGGER)})\s*[：:]\s*(.+)$", re.M)
+SCOPE_RE = re.compile(rf"^(?:{_any(L_SCOPE)})\s*[：:]\s*(.+)$", re.M)
+STATUS_HEAD_RE = re.compile(rf"^#{{2,3}}\s*.*(?:{_any(L_STATUS)}).*$", re.M)
 ISO_DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
-VERIFY_HEAD_RE = re.compile(r"^#{2,3}\s*.*(" + "|".join(map(re.escape, VERIFY_WORDS)) + ")", re.M)
+VERIFY_HEAD_RE = re.compile(rf"^#{{2,3}}\s*.*(?:{_any(L_VERIFY)})", re.M)
 LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
 CITE_RE = re.compile(r"wl/(\d{1,4})")
 
@@ -274,7 +295,7 @@ def meta_of(path: str) -> dict:
     title = re.sub(r"^\d+\s*[·.、:：]\s*", "", h1.group(1)).strip() if h1 else os.path.basename(path)
     dm = DATE_LINE_RE.search(text)
     iv = parse_iter(text)
-    cm = re.search(r"^结论\s*[：:]\s*(.+)$", text, re.M)
+    cm = CONCLUSION_RE.search(text)
     sections = re.findall(r"^(#{2,3})\s+(.+?)\s*$", text, re.M)
     return {
         "title": title,
@@ -313,6 +334,15 @@ def find_section(lines: list[str], level: int, keyword: str):
                     break
                 j += 1
             return i, i + 1, j
+    return None
+
+
+def find_labeled_section(lines: list[str], level: int, aliases: tuple[str, ...]):
+    """按别名表找小节（任一别名命中即可）——用于跨语言解析。"""
+    for name in aliases:
+        span = find_section(lines, level, name)
+        if span:
+            return span
     return None
 
 
@@ -451,7 +481,7 @@ def check(root: str, journal_arg: str | None, lessons_arg: str | None, strict: b
         for n in nums:
             if is_active_entry(journal, entries[n][0]) and entry_link(journal, entries[n][0]) not in idx_text:
                 rep.add("WARN", jname, f"记录 {entry_link(journal, entries[n][0])} 未出现在索引中")
-        blocks = re.findall(r"^#{2,3}\s*.*当前状态.*$", idx_text, re.M)
+        blocks = STATUS_HEAD_RE.findall(idx_text)
         if not blocks:
             rep.add("WARN", jname, f"索引缺 `## {K_STATUS}` 块")
         elif len(blocks) > 1:
@@ -470,7 +500,7 @@ def check(root: str, journal_arg: str | None, lessons_arg: str | None, strict: b
                 rep.add("WARN", jname, f"「{K_STATUS}」块没有日期（标题写 `## {K_STATUS}（YYYY-MM-DD）`）")
             elif newest and sd < newest:
                 rep.add("WARN", jname, f"「{K_STATUS}」({sd}) 早于最新记录 ({newest})，台账可能过期")
-        if f"## {K_TODO}" not in idx_text:
+        if not any(f"## {a}" in idx_text for a in L_TODO):
             rep.add("INFO", jname, f"索引没有「{K_TODO}」小节（滚动清单建议保留）")
 
     for dp, dn, fn in os.walk(journal):
@@ -521,7 +551,7 @@ def lint(root: str, journal_arg: str | None, strict: bool) -> Report:
         for token in PLACEHOLDERS:
             if token in text:
                 rep.add("WARN", where, f"占位符未清理：`{token}`")
-        cm = re.search(r"^结论\s*[：:]\s*(.*)$", text, re.M)
+        cm = CONCLUSION_RE.search(text)
         if not cm or not cm.group(1).strip():
             rep.add("WARN", where, "「结论：」为空")
         elif not _checkable(cm.group(1)):
@@ -554,14 +584,14 @@ def lint(root: str, journal_arg: str | None, strict: bool) -> Report:
 def status_block_text(journal: str) -> str:
     index = os.path.join(journal, "README.md")
     lines = read_raw(index).splitlines(keepends=True)
-    span = find_section(lines, 2, K_STATUS)
+    span = find_labeled_section(lines, 2, L_STATUS)
     return "".join(lines[span[0]:span[2]]).strip() if span else ""
 
 
 def todo_items(journal: str) -> tuple[list[str], list[str]]:
     index = os.path.join(journal, "README.md")
     lines = read_raw(index).splitlines()
-    span = find_section(lines, 2, K_TODO)
+    span = find_labeled_section(lines, 2, L_TODO)
     open_items, done_items = [], []
     if span:
         for line in lines[span[1]:span[2]]:
@@ -641,10 +671,10 @@ def cmd_show(args: argparse.Namespace) -> int:
     print(f"title : {m['title']}")
     print(f"date  : {m['date'] or '-'}   迭代: {m['iter'] or '-'}   {m['lines']} lines / {m['bytes']} B"
           f"   verify: {'yes' if m['has_verify'] else 'no'}")
-    for key in ("触发", "范围", "结论"):
-        mm = re.search(rf"^{key}\s*[：:]\s*(.+)$", text, re.M)
+    for label, pat in (("触发", TRIGGER_RE), ("范围", SCOPE_RE), ("结论", CONCLUSION_RE)):
+        mm = pat.search(text)
         if mm:
-            print(f"{key:<6}: {mm.group(1).strip()[:100]}")
+            print(f"{label:<6}: {mm.group(1).strip()[:100]}")
     print("sections:")
     lines = text.splitlines()
     for i, line in enumerate(lines):
@@ -714,7 +744,7 @@ def index_sync(journal: str, only: list[int] | None = None, stage: str | None = 
     if not missing:
         return [], "索引已覆盖全部根目录记录"
 
-    idx_span = find_section(lines, 2, "文件索引")
+    idx_span = find_labeled_section(lines, 2, L_INDEX)
     search_from = idx_span[1] if idx_span else 0
     search_to = idx_span[2] if idx_span else len(lines)
     subs = [(i, heading_level(lines[i])[1]) for i in range(search_from, search_to) if heading_level(lines[i]) and heading_level(lines[i])[0] == 3]
@@ -794,7 +824,7 @@ def cmd_index_compact(args: argparse.Namespace) -> int:
     text = read_raw(index)
     lines = text.splitlines(keepends=True)
     nl = nl_of(text)
-    span = find_section(lines, 2, "文件索引")
+    span = find_labeled_section(lines, 2, L_INDEX)
     if not span:
         print("ERROR: 索引里没有 `## 文件索引` 小节")
         return 1
@@ -892,7 +922,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         print("ERROR: 找不到记录目录")
         return 1
     text, lines = _index_lines(journal)
-    span = find_section(lines, 2, K_STATUS)
+    span = find_labeled_section(lines, 2, L_STATUS)
     if not span:
         print(f"ERROR: 索引里没有 `## {K_STATUS}` 块")
         return 1
@@ -972,7 +1002,7 @@ def cmd_todo(args: argparse.Namespace) -> int:
         return 1
     text, lines = _index_lines(journal)
     index = os.path.join(journal, "README.md")
-    span = find_section(lines, 2, K_TODO)
+    span = find_labeled_section(lines, 2, L_TODO)
     if not span:
         print(f"ERROR: 索引里没有 `## {K_TODO}` 小节")
         return 1
